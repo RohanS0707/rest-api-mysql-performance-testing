@@ -1,0 +1,41 @@
+name: REST API + MySQL CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  api-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Start API and MySQL containers
+        run: |
+          cp .env.example .env
+          docker compose up -d --build --wait
+      - name: Install test dependencies
+        run: npm ci
+      - name: Run API and SQL validation tests
+        run: npm test
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-test-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Stop containers
+        if: always()
+        run: docker compose down -v

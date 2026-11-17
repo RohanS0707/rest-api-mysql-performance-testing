@@ -1,0 +1,68 @@
+{
+  "info": {
+    "_postman_id": "8e2b1c21-7df1-4af9-829b-2f3905a44c18",
+    "name": "REST API + MySQL Validation Demo",
+    "description": "CRUD, auth, validation and error cases for the local products API. SQL persistence assertions live in the Playwright API tests.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "adminToken", "value": "local-admin-token-change-me" },
+    { "key": "readToken", "value": "local-read-token-change-me" },
+    { "key": "sku", "value": "" },
+    { "key": "productId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": { "method": "GET", "url": "{{baseUrl}}/health" },
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('API and database are healthy', () => {", "  pm.response.to.have.status(200);", "  pm.expect(pm.response.json()).to.deep.equal({ status: 'ok', database: 'connected' });", "});"] } }]
+    },
+    {
+      "name": "Products - unauthenticated request is rejected",
+      "request": { "auth": { "type": "noauth" }, "method": "GET", "url": "{{baseUrl}}/api/products" },
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('Missing token returns 401', () => pm.response.to.have.status(401));"] } }]
+    },
+    {
+      "name": "Products - read-only list",
+      "request": { "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{readToken}}", "type": "string" }] }, "method": "GET", "url": "{{baseUrl}}/api/products?limit=20&offset=0" },
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('Returns a paged product list', () => {", "  pm.response.to.have.status(200);", "  pm.expect(pm.response.json()).to.have.property('data').that.is.an('array');", "  pm.expect(pm.response.json()).to.have.property('pagination');", "});"] } }]
+    },
+    {
+      "name": "Products - create",
+      "event": [{ "listen": "prerequest", "script": { "exec": ["pm.collectionVariables.set('sku', 'PM-' + Date.now());"] } }, { "listen": "test", "script": { "exec": ["pm.test('Creates a product', () => {", "  pm.response.to.have.status(201);", "  const body = pm.response.json();", "  pm.expect(body.data.sku).to.eql(pm.collectionVariables.get('sku'));", "  pm.collectionVariables.set('productId', body.data.id);", "});"] } }],
+      "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"sku\": \"{{sku}}\",\n  \"name\": \"Postman sample product\",\n  \"description\": \"Created by collection runner\",\n  \"price\": 19.95,\n  \"stock\": 5\n}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/api/products" }
+    },
+    {
+      "name": "Products - duplicate SKU returns conflict",
+      "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"sku\": \"{{sku}}\",\n  \"name\": \"Duplicate product\",\n  \"description\": \"\",\n  \"price\": 1,\n  \"stock\": 1\n}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/api/products" },
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('Duplicate SKU returns 409', () => {", "  pm.response.to.have.status(409);", "  pm.expect(pm.response.json().error.code).to.eql('CONFLICT');", "});"] } }]
+    },
+    {
+      "name": "Products - get created product",
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/products/{{productId}}" },
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('Reads the created product', () => {", "  pm.response.to.have.status(200);", "  pm.expect(pm.response.json().data.sku).to.eql(pm.collectionVariables.get('sku'));", "});"] } }]
+    },
+    {
+      "name": "Products - update",
+      "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"sku\": \"{{sku}}\",\n  \"name\": \"Updated by Postman\",\n  \"description\": \"Updated sample\",\n  \"price\": 24.5,\n  \"stock\": 8\n}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/api/products/{{productId}}" },
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('Updates product fields', () => {", "  pm.response.to.have.status(200);", "  pm.expect(pm.response.json().data.name).to.eql('Updated by Postman');", "});"] } }]
+    },
+    {
+      "name": "Products - invalid payload returns validation error",
+      "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"sku\": \"bad sku\",\n  \"name\": \"x\",\n  \"price\": -1,\n  \"stock\": 1.5\n}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/api/products" },
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('Invalid input returns 400', () => {", "  pm.response.to.have.status(400);", "  pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR');", "});"] } }]
+    },
+    {
+      "name": "Products - delete",
+      "request": { "method": "DELETE", "url": "{{baseUrl}}/api/products/{{productId}}" },
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('Deletes product with 204', () => pm.response.to.have.status(204));"] } }]
+    },
+    {
+      "name": "Products - deleted item is not found",
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/products/{{productId}}" },
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('Deleted product returns 404', () => {", "  pm.response.to.have.status(404);", "  pm.expect(pm.response.json().error.code).to.eql('NOT_FOUND');", "});"] } }]
+    }
+  ],
+  "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] }
+}
